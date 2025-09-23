@@ -245,7 +245,7 @@ def start_upscaler(video_file, upscaler_name="R-ESRGAN 4x+ Anime6B", as_gif=Fals
         out.release()
         print(f"✅ MP4 saved: {output_path} ({len(frames)} frames, {new_width}x{new_height}, {new_fps:.2f} FPS)")
 
-    free_memory()
+    # free_memory()
 
     return output_path
 
