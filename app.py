@@ -301,12 +301,12 @@ with gr.Blocks(css=CUSTOM_CSS, title="Video Upscaler") as demo:
             )
         num_workers = gr.Number(
             label="Workers",
-            value=(32 if IS_ZERO_GPU else 8),
+            value=(42 if IS_ZERO_GPU else 8),
             precision=0,
             minimum=2,
             maximum=64,
             info="Number of worker threads for multi-threaded upscaling. Higher values may speed up processing but use more VRAM.",
-            # interactive=(not IS_ZERO_GPU),
+            interactive=(not IS_ZERO_GPU),
         )
 
     upscale_button = gr.Button("Upscale Video", variant="primary")
