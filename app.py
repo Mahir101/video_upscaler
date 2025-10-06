@@ -319,4 +319,8 @@ with gr.Blocks(css=CUSTOM_CSS, title="Video Upscaler") as demo:
     )
 
 if __name__ == "__main__":
-    demo.launch(debug=True)
+    demo.launch(
+        debug=True,
+        show_error=True,
+        quiet=False,
+    )
