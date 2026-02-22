@@ -1,0 +1,36 @@
+# Temporary processing directories
+temp_upscale*/
+tmp_frames/
+out_frames/
+frames_lr/
+frames_hr/
+frames_4x/
+frames_8x/
+frames_interpolated/
+
+# Binaries and executables
+unblur_server_binary
+realesrgan-ncnn-vulkan
+*.exe
+*.o
+*.out
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Large model files (optional, but good for git)
+*.gob
+*.pth
+*.pth
+*.bin
+*.param
+*.pkl
+
