@@ -1,103 +1,69 @@
-
-<h1>Go Image &amp; Video Upscaler</h1>
+<h1>Video Upscaler Pro</h1>
 <p><strong>Created by Md. Mahir Labib</strong><br>
 Copyright © 2026 Md. Mahir Labib. All rights reserved.</p>
-<p>This project is a high-performance, command-line tool written in <strong>C++</strong> for upscaling images and videos. It utilizes a custom, pre-trained model to perform a 3x upscale, with a focus on unblurring and denoising the source material. The processing is done in parallel to leverage multi-core CPUs for significant speed improvements.</p>
+
+<p>A professional, high-performance command-line tool written in <strong>C++</strong> for upscaling videos and images. This "Pro" version is specifically optimized for <strong>Apple Silicon (M1/M2/M3/M4)</strong>, leveraging hardware-accelerated encoding (VideoToolbox) and motion-compensated frame interpolation for smooth 60 FPS output.</p>
+
+<div align="center">
+  <img src="https://img.shields.io/badge/Platform-macOS%20(Silicon)-blue?style=for-the-badge&logo=apple" alt="Platform">
+  <img src="https://img.shields.io/badge/Language-C++17-orange?style=for-the-badge&logo=c%2B%2B" alt="Language">
+  <img src="https://img.shields.io/badge/Encoder-VideoToolbox-green?style=for-the-badge" alt="Encoder">
+</div>
 
 ## Workflow
 
 ```mermaid
 graph TD
-    A[Input Video/Image] --> B{Process Type}
-    B -- Video --> C[Extract Frames via FFmpeg]
-    B -- Image --> D[Upscale Image]
-    C --> E[Upscale Each Frame via C++ Tool]
-    E --> F[Frame Interpolation to 60 FPS]
-    F --> G[Reassemble Video via FFmpeg]
-    D --> H[Save Output]
-    G --> H
+    A[Input Video] --> B[Extract Frames via FFmpeg]
+    B --> C[Real-ESRGAN Upscaling]
+    C --> D[Motion Interpolation to 60 FPS]
+    D --> E[M4 Hardware Encode - VideoToolbox]
+    E --> F[Final 4K/60FPS Output]
     
-    subgraph "Core Engine"
-    E
+    subgraph "Pro Engine"
+    C
     D
+    E
     end
 ```
 
-<h2>Features</h2>
-<ul>
-  <li><strong>3x Image Upscaling</strong>: Enhance the resolution of images (PNG) by a factor of 3.</li>
-  <li><strong>3x Video Upscaling</strong>: Process videos by extracting frames, upscaling them individually, and reassembling them into a high-resolution video file.</li>
-  <li><strong>Unblur &amp; Denoise</strong>: The included model is trained not just to enlarge, but also to correct common imperfections like blur and noise.</li>
-   <li><strong>High Performance</strong>: Leverages C++ and parallel processing to process image rows or video frames in parallel across all available CPU cores.</li>
-  <li><strong>Command-Line Interface</strong>: Simple and clear flags for easy operation on local files.</li>
-  <li><strong>Self-Contained Model</strong>: Uses a pre-trained model stored in a <code>.gob</code> file, which is Go's native binary format.</li>
-</ul>
+## Features
+- **Apple Silicon Optimized**: Uses `h264_videotoolbox` for lightning-fast hardware encoding on M-series chips.
+- **Real-Time Progress**: Dynamic ANSI progress bar tracks upscaling progress in the terminal.
+- **Motion Interpolation**: Native support for creating smooth 60 FPS video from low-framerate sources.
+- **Fail-Safe Cleanup**: Automatic signal handling ensures temporary files are deleted even if interrupted (Ctrl+C).
+- **Professional CLI**: Comprehensive flag support for input, output, scale, and model selection.
 
-<h2>Prerequisites</h2>
-<p>Before using this tool, you must have the following software installed on your system:</p>
-<ol>
-   <li>
-       <strong>C++ Compiler</strong>: A modern C++ compiler (GCC, Clang, or MSVC) supporting C++17 or later.
-   </li>
-  <li>
-      <strong>FFmpeg</strong>: A powerful multimedia framework used to extract frames from the input video and reassemble them with audio.
-      <ul>
-          <li>Installation instructions can be found on the <a href="https://ffmpeg.org/download.html" target="_blank" rel="noopener noreferrer">official FFmpeg website</a>.</li>
-          <li>Ensure that both <code>ffmpeg</code> and <code>ffprobe</code> are available in your system's <code>PATH</code>. You can verify this by running <code>ffmpeg -version</code> and <code>ffprobe -version</code> in your terminal.</li>
-      </ul>
-  </li>
-</ol>
+## Prerequisites
+- **macOS** with Apple Silicon (Recommended for VideoToolbox acceleration).
+- **FFmpeg**: Must be installed and available in `PATH`.
+- **Real-ESRGAN Binary**: `realesrgan-ncnn-vulkan` must be in the project root.
 
-<h2>Installation &amp; Setup</h2>
-<ol>
-  <li>
-      <strong>Clone the Repository</strong>
-      <pre><code>git clone &lt;repository-url&gt;
-cd &lt;repository-directory&gt;</code></pre>
-  </li>
-  <li>
-      <strong>Get the Model File</strong>
-      <p>This program requires the model file <code>unblur_denoice_shared_model_x3_20.gob</code> to be present in the same directory as the executable.</p>
-  </li>
-  <li>
-       <strong>Build the Executable</strong>
-       <p>Create a binary from the source code. This command will produce an executable file (e.g., <code>upscaler</code> on Linux/macOS or <code>upscaler.exe</code> on Windows).</p>
-       <pre><code>g++ -O3 -o upscaler main.cpp -lpthread</code></pre>
-  </li>
-</ol>
+## Installation
+```bash
+# Build the Pro version
+g++ -O3 -o upscaler_pro main.cpp -lpthread -std=c++17
+```
 
-<h2>Usage</h2>
-<p>The tool is operated via command-line flags. The primary mode is <code>upscale</code>.</p>
+## Usage
+The Pro version uses professional CLI flags:
 
-<h3>Image Upscaling</h3>
-<p>To upscale a single image:</p>
-<pre><code>./unblur_server_binary -mode=upscale -lr=input.png -out=output_upscaled.png</code></pre>
-<ul>
-  <li><code>-mode=upscale</code>: Specifies the operation mode.</li>
-  <li><code>-lr=&lt;path&gt;</code>: Path to the low-resolution input image.</li>
-  <li><code>-out=&lt;path&gt;</code>: Path for the resulting high-resolution output image.</li>
-</ul>
+```bash
+./upscaler_pro --input my_video.mp4 --output high_res.mp4 --fps 60 --scale 4
+```
 
-<h3>Video Upscaling</h3>
-<p>To upscale a video file:</p>
-<pre><code>./unblur_server_binary -mode=upscale -videoin=my_video.mp4 -videoout=my_video_upscaled.mp4</code></pre>
-<ul>
-  <li><code>-videoin=&lt;path&gt;</code>: Path to the low-resolution input video.</li>
-  <li><code>-videoout=&lt;path&gt;</code>: Path for the resulting high-resolution output video.</li>
-</ul>
-<p>The tool will automatically handle:</p>
-<ul>
-  <li>Creating a temporary directory for frames.</li>
-  <li>Extracting all frames from the input video using <code>ffmpeg</code>.</li>
-  <li>Upscaling each frame in parallel.</li>
-  <li>Reassembling the upscaled frames into a new video.</li>
-  <li>Copying the audio track from the original video to the final output.</li>
-</ul>
+### Options
+| Flag | Short | Default | Description |
+|---|---|---|---|
+| `--input` | `-i` | (Required) | Path to input video/image. |
+| `--output` | `-o` | `output_pro.mp4` | Path for the high-res result. |
+| `--fps` | `-f` | `60` | Target framerate for interpolation. |
+| `--scale` | `-s` | `4` | Upscale ratio (e.g., 2, 3, 4). |
+| `--model` | `-m` | `realesrgan-x4plus` | Model name (e.g., `realesr-animevideov3`). |
 
-<h3>Using a Different Model</h3>
-<p>You can specify a different model file using the <code>-model</code> flag:</p>
-<pre><code>./unblur_server_binary -mode=upscale -lr=input.jpg -model=another_model.gob -out=output.png</code></pre>
-
-<hr>
-
-
+## Architecture Notes
+The tool operates as a high-level orchestrator:
+1. **Extraction**: Decodes the input video into high-quality intermediate frames.
+2. **AI Upscaling**: Executes the NCNN-optimized Real-ESRGAN engine.
+3. **Interpolation**: Applies motion estimation filters to "guess" missing frames for 60 FPS.
+4. **Encoding**: Pipes the processed frames into the Apple Media Engine for final compression.
