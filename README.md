@@ -60,6 +60,8 @@ The Pro version uses professional CLI flags:
 | `--fps` | `-f` | `60` | Target framerate for interpolation. |
 | `--scale` | `-s` | `4` | Upscale ratio (e.g., 2, 3, 4). |
 | `--model` | `-m` | `realesrgan-x4plus` | Model name (e.g., `realesr-animevideov3`). |
+| `--tile` | `-t` | `0` | Tile size (0 = auto). Fixes grid seams. |
+| `--frames` | `-n` | (All) | Limit number of frames to process. |
 
 ## Architecture Notes
 The tool operates as a high-level orchestrator:
