@@ -94,6 +94,9 @@ int main(int argc, char* argv[]) {
     std::string fps = "60";
     std::string scale = "4";
     std::string model = "realesrgan-x4plus";
+    std::string tile = "1024"; // Higher default for M4 to avoid seams
+    std::string limit_frames = ""; // All by default
+    bool keep_temp = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -102,6 +105,9 @@ int main(int argc, char* argv[]) {
         else if (arg == "--fps" || arg == "-f") fps = argv[++i];
         else if (arg == "--scale" || arg == "-s") scale = argv[++i];
         else if (arg == "--model" || arg == "-m") model = argv[++i];
+        else if (arg == "--tile" || arg == "-t") tile = argv[++i];
+        else if (arg == "--frames" || arg == "-n") limit_frames = argv[++i];
+        else if (arg == "--keep-temp") keep_temp = true;
     }
 
     if (input.empty()) {
@@ -111,6 +117,8 @@ int main(int argc, char* argv[]) {
         std::cout << "  -f, --fps <val>       (default: 60)" << std::endl;
         std::cout << "  -s, --scale <val>     (default: 4)" << std::endl;
         std::cout << "  -m, --model <name>    (default: realesrgan-x4plus)" << std::endl;
+        std::cout << "  -t, --tile <val>      (default: 0 - auto)" << std::endl;
+        std::cout << "  -n, --frames <count>  (default: all)" << std::endl;
         return 1;
     }
 
@@ -128,14 +136,17 @@ int main(int argc, char* argv[]) {
 
         // Extract
         std::cout << "📽️  Extracting frames (Hardware accelerated read)..." << std::endl;
-        run_command("ffmpeg -y -i \"" + input + "\" -qscale:v 2 \"" + g_temp_dir + "/lr/f_%07d.png\"");
+        std::string extract_cmd = "ffmpeg -y -i \"" + input + "\" ";
+        if (!limit_frames.empty()) extract_cmd += "-frames:v " + limit_frames + " ";
+        extract_cmd += "-qscale:v 2 \"" + g_temp_dir + "/lr/f_%07d.png\"";
+        run_command(extract_cmd);
         
         size_t total_frames = std::distance(fs::directory_iterator(g_temp_dir + "/lr"), fs::directory_iterator{});
         std::cout << "📦 Total frames to process: " << total_frames << std::endl;
 
         // Upscale with Progress Monitoring
-        std::cout << "🔍 Upscaling with Real-ESRGAN (" << scale << "x)..." << std::endl;
-        std::string upscale_cmd = "./realesrgan-ncnn-vulkan -i \"" + g_temp_dir + "/lr\" -o \"" + g_temp_dir + "/hr\" -n " + model + " -s " + scale + " -f png";
+        std::cout << "🔍 Upscaling with Real-ESRGAN (" << scale << "x, Tile: " << (tile == "0" ? "Auto" : tile) << ")..." << std::endl;
+        std::string upscale_cmd = "./realesrgan-ncnn-vulkan -i \"" + g_temp_dir + "/lr\" -o \"" + g_temp_dir + "/hr\" -n " + model + " -s " + scale + " -t " + tile + " -f png";
         
         // Run upscale in a thread so we can monitor progress
         std::atomic<bool> upscale_done(false);
@@ -168,14 +179,19 @@ int main(int argc, char* argv[]) {
         run_command(audio_cmd);
 
         // Cleanup
-        fs::remove_all(g_temp_dir);
-        g_temp_dir = "";
+        if (!keep_temp) {
+            fs::remove_all(g_temp_dir);
+            g_temp_dir = "";
+        } else {
+            std::cout << "📁 Keeping temporary files in: " << g_temp_dir << std::endl;
+        }
 
         std::cout << std::endl << "\033[1;32m✅ DONE! Pro Upscale successful.\033[0m" << std::endl;
         std::cout << "🎉 Result saved to: " << output << std::endl;
 
     } catch (const std::exception& e) {
-        if (!g_temp_dir.empty()) fs::remove_all(g_temp_dir);
+        if (!g_temp_dir.empty() && !keep_temp) fs::remove_all(g_temp_dir);
+        else if (!g_temp_dir.empty() && keep_temp) std::cout << "📁 Keeping temporary files for debugging in: " << g_temp_dir << std::endl;
         std::cerr << "\033[1;31m❌ Error: " << e.what() << "\033[0m" << std::endl;
         return 1;
     }
