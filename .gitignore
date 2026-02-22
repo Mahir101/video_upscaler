@@ -9,8 +9,6 @@ frames_8x/
 frames_interpolated/
 
 # Binaries and executables
-unblur_server_binary
-realesrgan-ncnn-vulkan
 *.exe
 *.o
 *.out
