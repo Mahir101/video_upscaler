@@ -84,6 +84,7 @@ int main(int argc, char* argv[]) {
     std::string output = "output_pro.mp4";
     std::string fps = "60";
     std::string scale = "4";
+    std::string limit_frames = "";
     Encoder encoder = Encoder::H264;
     bool use_rife = false;
 
@@ -94,6 +95,7 @@ int main(int argc, char* argv[]) {
         else if (arg == "--output" || arg == "-o") output = argv[++i];
         else if (arg == "--fps" || arg == "-f") fps = argv[++i];
         else if (arg == "--scale" || arg == "-s") scale = argv[++i];
+        else if (arg == "--frames" || arg == "-n") limit_frames = argv[++i];
         else if (arg == "--hevc") encoder = Encoder::HEVC;
         else if (arg == "--prores") { encoder = Encoder::PRORES; output = "output_pro.mov"; }
         else if (arg == "--rife") use_rife = true;
@@ -122,7 +124,8 @@ int main(int argc, char* argv[]) {
 
         // Step 1: Sequential Pipe Extraction
         std::cout << "📽️  Extracting Frames..." << std::endl;
-        run_command("ffmpeg -y -i \"" + input + "\" -qscale:v 2 \"" + g_temp_dir + "/lr/f_%07d.png\"");
+        std::string frames_limit = limit_frames.empty() ? "" : "-frames:v " + limit_frames;
+        run_command("ffmpeg -y -i \"" + input + "\" " + frames_limit + " -qscale:v 2 \"" + g_temp_dir + "/lr/f_%07d.png\"");
         
         size_t total_frames = std::distance(fs::directory_iterator(g_temp_dir + "/lr"), fs::directory_iterator{});
         std::cout << "📦 Frames: " << total_frames << " | Source: " << orig_fps << " FPS" << std::endl;
