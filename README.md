@@ -1,71 +1,65 @@
-<h1>Video Upscaler Pro</h1>
+<h1>Ultimate Video Upscaler</h1>
 <p><strong>Created by Md. Mahir Labib</strong><br>
 Copyright © 2026 Md. Mahir Labib. All rights reserved.</p>
 
-<p>A professional, high-performance command-line tool written in <strong>C++</strong> for upscaling videos and images. This "Pro" version is specifically optimized for <strong>Apple Silicon (M1/M2/M3/M4)</strong>, leveraging hardware-accelerated encoding (VideoToolbox) and motion-compensated frame interpolation for smooth 60 FPS output.</p>
+<p>The ultimate professional-grade media engine for video upscaling and frame interpolation, fully optimized for <strong>Apple Silicon M4</strong>. This version features hardware-accelerated HEVC and ProRes encoding, AI-driven motion interpolation, and real-time performance monitoring.</p>
 
 <div align="center">
-  <img src="https://img.shields.io/badge/Platform-macOS%20(Silicon)-blue?style=for-the-badge&logo=apple" alt="Platform">
-  <img src="https://img.shields.io/badge/Language-C++17-orange?style=for-the-badge&logo=c%2B%2B" alt="Language">
-  <img src="https://img.shields.io/badge/Encoder-VideoToolbox-green?style=for-the-badge" alt="Encoder">
+  <img src="https://img.shields.io/badge/Codec-HEVC%20%2F%20ProRes-blue?style=for-the-badge" alt="Codecs">
+  <img src="https://img.shields.io/badge/Hardware-Apple%20M4-orange?style=for-the-badge&logo=apple" alt="Hardware">
+  <img src="https://img.shields.io/badge/Interpolation-RIFE%20AI-green?style=for-the-badge" alt="AI">
 </div>
 
-## Workflow
+## Key Features
 
-```mermaid
-graph TD
-    A[Input Video] --> B[Extract Frames via FFmpeg]
-    B --> C[Real-ESRGAN Upscaling]
-    C --> D[Motion Interpolation to 60 FPS]
-    D --> E[M4 Hardware Encode - VideoToolbox]
-    E --> F[Final 4K/60FPS Output]
-    
-    subgraph "Pro Engine"
-    C
-    D
-    E
-    end
-```
-
-## Features
-- **Apple Silicon Optimized**: Uses `h264_videotoolbox` for lightning-fast hardware encoding on M-series chips.
-- **Real-Time Progress**: Dynamic ANSI progress bar tracks upscaling progress in the terminal.
-- **Motion Interpolation**: Native support for creating smooth 60 FPS video from low-framerate sources.
-- **Fail-Safe Cleanup**: Automatic signal handling ensures temporary files are deleted even if interrupted (Ctrl+C).
-- **Professional CLI**: Comprehensive flag support for input, output, scale, and model selection.
-
-## Prerequisites
-- **macOS** with Apple Silicon (Recommended for VideoToolbox acceleration).
-- **FFmpeg**: Must be installed and available in `PATH`.
-- **Real-ESRGAN Binary**: `realesrgan-ncnn-vulkan` must be in the project root.
+- 🏎️ **Apple Silicon Suite**: Native support for `hevc_videotoolbox` and `prores_videotoolbox`.
+- ✨ **RIFE AI Integration**: Support for RIFE (Real-Time Intermediate Flow Estimation) for perfectly smooth 60+ FPS motion.
+- 📂 **Zero-Disk Strategy**: Optimized internal pipelining and temporary file management to minimize SSD wear.
+- 🎥 **ProRes 422 HQ**: Generate masterfiles ready for professional editing in Final Cut or Premiere.
+- 🛡️ **Signal Resilience**: Graceful interrupt handling with auto-cleanup of temporary data.
 
 ## Installation
+
 ```bash
-# Build the Pro version
-g++ -O3 -o upscaler_pro main.cpp -lpthread -std=c++17
+# Build the Ultimate tool
+g++ -O3 -o upscaler_ult main.cpp -lpthread -std=c++17
 ```
 
 ## Usage
-The Pro version uses professional CLI flags:
 
+### 🚀 High Efficiency (HEVC)
+Best for sharing online or keeping high-quality backups.
 ```bash
-./upscaler_pro --input my_video.mp4 --output high_res.mp4 --fps 60 --scale 4
+./upscaler_ult --input my_movie.mp4 --hevc --fps 60
 ```
 
-### Options
-| Flag | Short | Default | Description |
-|---|---|---|---|
-| `--input` | `-i` | (Required) | Path to input video/image. |
-| `--output` | `-o` | `output_pro.mp4` | Path for the high-res result. |
-| `--fps` | `-f` | `60` | Target framerate for interpolation. |
-| `--scale` | `-s` | `4` | Upscale ratio (e.g., 2, 3, 4). |
-| `--model` | `-m` | `realesrgan-x4plus` | Model name (e.g., `realesr-animevideov3`). |
-| `--tile` | `-t` | `0` | Tile size (0 = auto). Fixes grid seams. |
-| `--frames` | `-n` | (All) | Limit number of frames to process. |
+### 🎬 Professional Workflow (ProRes)
+Best for masterfiles and further editing.
+```bash
+./upscaler_ult --input raw_clip.mov --prores
+```
 
-## Architecture Notes
-The tool operates as a high-level orchestrator:
-1. **Extraction**: Decodes the input video into high-quality intermediate frames.
-2. **AI Upscaling**: Executes the NCNN-optimized Real-ESRGAN engine.
-3. **Interpolation**: Applies motion estimation filters to "guess" missing frames for 60 FPS.
-4. **Encoding**: Pipes the processed frames into the Apple Media Engine for final compression.
+### ✨ AI Fluid Motion (RIFE)
+Requires `rife-ncnn-vulkan` binary in the project root.
+```bash
+./upscaler_ult --input low_fps.mp4 --rife --fps 120
+```
+
+## CLI Reference
+
+| Flag | Description |
+|---|---|
+| `--hevc` | Enables H.265 Hardware Encoder (VideoToolbox). |
+| `--prores` | Enables Apple ProRes 422 HQ Encoder. |
+| `--rife` | Activates RIFE AI Frame Interpolation. |
+| `--input / -i` | Path to the source file. |
+| `--scale / -s` | Upscale factor (default: 4). |
+| `--fps / -f` | Target frames per second (default: 60). |
+| `--output / -o` | Custom output path. |
+
+## Why this is "Ultimate"?
+Unlike basic upscalers, this tool handles the entire **Media Lifecycle**:
+1. **Extraction**: High-bitrate intermediate processing.
+2. **AI Logic**: Leveraging NCNN Vulkan for GPU-based super-resolution.
+3. **Interpolation**: Intelligent motion estimation.
+4. **Mastering**: Encoding directly to hardware-supported codecs for maximum speed and quality.
