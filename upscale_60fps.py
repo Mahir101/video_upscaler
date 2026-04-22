@@ -9,10 +9,9 @@ import sys
 import subprocess
 import shutil
 import glob
+import tempfile
 from pathlib import Path
 import cv2
-import numpy as np
-from PIL import Image
 
 def check_dependencies():
     """Check if all required dependencies are available"""
@@ -78,7 +77,7 @@ def setup_realesrgan(scale=4):
     
     return upsampler
 
-def extract_frames(video_path, output_dir, fps=None):
+def extract_frames(video_path, output_dir, fps=None, max_frames=0):
     """Extract frames from video using FFmpeg"""
     os.makedirs(output_dir, exist_ok=True)
     
@@ -97,11 +96,13 @@ def extract_frames(video_path, output_dir, fps=None):
     print(f"📽️ Extracting frames at {fps:.2f} FPS...")
     
     cmd = [
-        'ffmpeg', '-i', video_path,
+        'ffmpeg', '-y', '-i', video_path,
         '-qscale:v', '2',
         '-start_number', '0',
-        f'{output_dir}/frame_%07d.png'
     ]
+    if max_frames:
+        cmd.extend(['-frames:v', str(max_frames)])
+    cmd.append(f'{output_dir}/frame_%07d.png')
     
     subprocess.run(cmd, capture_output=True, check=True)
     
@@ -140,9 +141,6 @@ def create_video_with_interpolation(frames_dir, output_path, source_fps, target_
     Uses FFmpeg's minterpolate filter for motion-compensated interpolation
     """
     print(f"🎬 Creating smooth {target_fps} FPS video with motion interpolation...")
-    
-    # Calculate interpolation factor
-    fps_multiplier = target_fps / source_fps
     
     cmd = [
         'ffmpeg', '-y',
@@ -196,6 +194,7 @@ def main():
     parser.add_argument('input', help='Input video file')
     parser.add_argument('-o', '--output', default='video-upscaled.mp4', help='Output video file')
     parser.add_argument('--fps', type=int, default=60, help='Target FPS (default: 60)')
+    parser.add_argument('-n', '--frames', type=int, default=0, help='Limit extracted frames for testing')
     parser.add_argument('--keep-temp', action='store_true', help='Keep temporary files')
     
     args = parser.parse_args()
@@ -214,18 +213,16 @@ def main():
     check_dependencies()
     
     # Setup directories
-    temp_dir = Path('temp_upscale')
+    temp_root = tempfile.mkdtemp(prefix='video_upscale_')
+    temp_dir = Path(temp_root)
     lr_frames_dir = temp_dir / 'lr_frames'
     hr_frames_dir = temp_dir / 'hr_frames'
     temp_video = temp_dir / 'temp_no_audio.mp4'
-    
-    # Clean previous temp if exists
-    if temp_dir.exists():
-        shutil.rmtree(temp_dir)
+    print(f"📁 Temporary workspace: {temp_dir}")
     
     try:
         # Step 1: Extract frames
-        frames, original_fps = extract_frames(args.input, str(lr_frames_dir))
+        frames, original_fps = extract_frames(args.input, str(lr_frames_dir), max_frames=args.frames)
         
         # Step 2: Setup Real-ESRGAN
         print("\n🔧 Initializing Real-ESRGAN...")
@@ -263,6 +260,8 @@ def main():
         if not args.keep_temp and temp_dir.exists():
             print("\n🧹 Cleaning up temporary files...")
             shutil.rmtree(temp_dir)
+        elif args.keep_temp:
+            print(f"\n📁 Temporary files kept at: {temp_dir}")
 
 if __name__ == '__main__':
     main()

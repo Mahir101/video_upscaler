@@ -1,5 +1,6 @@
 # Temporary processing directories
 temp_upscale*/
+temp_ultimate*/
 tmp_frames/
 out_frames/
 frames_lr/
@@ -12,24 +13,42 @@ frames_interpolated/
 *.exe
 *.o
 *.out
+upscaler_pro
+upscaler_ult
+realesrgan-ncnn-vulkan
+rife-ncnn-vulkan
+unblur_server_binary
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 venv/
+.venv/
 .env
+.pytest_cache/
 
 # OS specific
 .DS_Store
 Thumbs.db
 
-# Large model files (optional, but good for git)
+# Generated media and local assets
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.avi
+*.png
+*.jpg
+*.jpeg
+
+# Archives and large model files
+*.zip
+*.tar
+*.tar.gz
 *.gob
-*.pth
 *.pth
 *.bin
 *.param
 *.pkl
-temp*
-
+*.safetensors
