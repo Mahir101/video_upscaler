@@ -92,6 +92,17 @@ std::string shell_token(const std::string& value) {
     return value;
 }
 
+// Validates an FFmpeg framerate token: digits, '.', '/', '-' only (e.g. "60", "1199/50", "23.976")
+std::string shell_token_fps(const std::string& value) {
+    if (value.empty()) throw std::runtime_error("Missing framerate value");
+    for (char c : value) {
+        if (!std::isdigit(static_cast<unsigned char>(c)) && c != '.' && c != '/') {
+            throw std::runtime_error("Unsafe framerate token: " + value);
+        }
+    }
+    return value;
+}
+
 void print_progress_bar(float progress, int width = 40) {
     std::cout << "\r\033[1;32mProgress: [";
     int pos = width * progress;
@@ -274,7 +285,7 @@ int main(int argc, char* argv[]) {
 
         std::string filter = (final_frame_dir == g_temp_dir + "/interp") ? "" : "-vf " + shell_quote("minterpolate=fps=" + safe_fps + ":mi_mode=mci:mc_mode=aobmc");
         
-        std::string safe_input_fps = shell_token(use_rife ? safe_fps : orig_fps);
+        std::string safe_input_fps = shell_token_fps(use_rife ? safe_fps : orig_fps);
         std::string encode_cmd = "ffmpeg -y -framerate " + safe_input_fps + " -i " + shell_quote(final_frame_dir + "/f_%07d.png") + " " +
                                 filter + " -c:v " + codec_flag + " " + bitrate_flag + " -pix_fmt " + pix_fmt + " -an " + shell_quote(g_temp_dir + "/no_audio.mp4");
         run_command(encode_cmd);
