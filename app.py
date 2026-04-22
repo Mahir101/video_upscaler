@@ -17,6 +17,7 @@ import torch
 
 from video_utils import (
     OUTPUT_DIRECTORY,
+    build_frame_encode_command,
     build_mux_command,
     cached_checksum,
     checksum_sidecar_path,
@@ -26,6 +27,11 @@ from video_utils import (
     upscaler_filename_from_url,
     validate_video_limits,
     write_checksum_sidecar,
+)
+from video_sr_backend import (
+    SUPPORTED_VIDEO_SR_MODELS,
+    run_mmagic_video_sr,
+    video_sr_guidance_text,
 )
 
 DIRECTORY_UPSCALERS = "upscalers"
@@ -69,6 +75,8 @@ MODEL_GUIDANCE = {
     "RealisticRescaler4x": "Realistic/detail-oriented ESRGAN option.",
     "NickelbackFS4x": "Strong detail reconstruction; can be aggressive on noisy footage.",
 }
+PROCESSING_MODES = ["Frame Upscaler", "Video SR"]
+VIDEO_SR_KEYS = list(SUPPORTED_VIDEO_SR_MODELS.keys())
 CUSTOM_CSS = """
 h1 {
     color: #333;
@@ -339,6 +347,21 @@ def mux_media(input_video_path, silent_video_path, output_path, keep_audio=True,
     return True
 
 
+def encode_frame_sequence(frames_dir, fps, output_path, codec="libx264", crf=18):
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("Video SR mode requires ffmpeg to encode the restored frame sequence.")
+
+    frames_pattern = os.path.join(frames_dir, "%08d.png")
+    if not os.path.exists(os.path.join(frames_dir, "00000000.png")):
+        raise RuntimeError("Video SR backend did not produce the expected frame sequence.")
+
+    command = build_frame_encode_command(ffmpeg, frames_pattern, fps, output_path, codec=codec, crf=crf)
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed to encode Video SR frames:\n{result.stderr}")
+
+
 @spaces.GPU(duration=120)
 def zero_comp(
     video_file,
@@ -398,9 +421,70 @@ def zero_comp(
     return stats
 
 
+@spaces.GPU(duration=120)
+def video_sr_comp(
+    video_file,
+    output_path,
+    video_sr_model,
+    speed_factor,
+    progress,
+    device,
+    keep_audio,
+    keep_metadata,
+    codec,
+    crf,
+    max_seq_len,
+    window_size,
+):
+    silent_path = None
+    frames_dir = None
+    try:
+        progress(0, desc="Running temporal video SR")
+        fps = (read_video_metadata(video_file)["fps"] or 30.0) * speed_factor
+        frames_dir = tempfile.mkdtemp(prefix="vsr_frames_", dir=OUTPUT_DIRECTORY)
+        run_mmagic_video_sr(
+            video_file,
+            frames_dir,
+            video_sr_model,
+            device,
+            max_seq_len=int(max_seq_len or 0),
+            window_size=int(window_size or 0),
+        )
+        progress(0.75, desc="Encoding restored frames")
+        silent_fd, silent_path = tempfile.mkstemp(suffix=".mp4", prefix="vsr_silent_", dir=OUTPUT_DIRECTORY)
+        os.close(silent_fd)
+        encode_frame_sequence(frames_dir, fps, silent_path, codec=codec, crf=crf)
+        muxed = mux_media(
+            video_file,
+            silent_path,
+            output_path,
+            keep_audio=keep_audio,
+            keep_metadata=keep_metadata,
+            codec=codec,
+            crf=crf,
+        )
+        silent_path = None
+        progress(1, desc="Video SR complete")
+        metadata = read_video_metadata(output_path)
+        return {
+            "frames": metadata["total_frames"],
+            "width": metadata["width"],
+            "height": metadata["height"],
+            "fps": metadata["fps"],
+            "muxed_with_ffmpeg": muxed,
+        }
+    finally:
+        remove_if_exists(silent_path)
+        if frames_dir and os.path.exists(frames_dir):
+            shutil.rmtree(frames_dir)
+        free_memory()
+
+
 def start_upscaler(
     video_file,
+    processing_mode="Frame Upscaler",
     upscaler_name="R-ESRGAN 4x+ Anime6B",
+    video_sr_model="RealBasicVSR",
     as_gif=False,
     speed_factor=1.0,
     half_precision=True,
@@ -415,12 +499,16 @@ def start_upscaler(
     codec="libx264",
     crf=18,
     temporal_smoothing=0.0,
+    video_sr_max_seq_len=0,
+    video_sr_window_size=0,
     progress=gr.Progress(track_tqdm=True),
 ):
     if video_file is None:
         raise ValueError("Error: No video file provided.")
     if not isinstance(video_file, str):
         video_file = video_file.name
+    if processing_mode == "Video SR" and as_gif:
+        raise ValueError("Video SR mode currently outputs MP4 only. Disable GIF output.")
     ext = "gif" if as_gif else "mp4"
     output_path = make_output_path(video_file, ext)
 
@@ -440,32 +528,48 @@ def start_upscaler(
         max_height=int(max_height or 0),
     )
 
-    cl_name_upscaler = resolve_upscaler_model(upscaler_name)
     device = get_compute_device()
-    use_half_precision = half_precision and device == "cuda"
-
-    upscaler_params = dict(
-        model=cl_name_upscaler,
-        tile=tile,
-        tile_overlap=tile_overlap,
-        device=device,
-        half=use_half_precision,
-    )
     try:
-        stats = zero_comp(
-            video_file,
-            output_path,
-            as_gif,
-            upscaler_factor,
-            speed_factor,
-            progress,
-            upscaler_params,
-            keep_audio,
-            keep_metadata,
-            codec,
-            int(crf),
-            float(temporal_smoothing or 0.0),
-        )
+        if processing_mode == "Video SR":
+            stats = video_sr_comp(
+                video_file,
+                output_path,
+                video_sr_model,
+                speed_factor,
+                progress,
+                device,
+                keep_audio,
+                keep_metadata,
+                codec,
+                int(crf),
+                int(video_sr_max_seq_len or 0),
+                int(video_sr_window_size or 0),
+            )
+        else:
+            cl_name_upscaler = resolve_upscaler_model(upscaler_name)
+            use_half_precision = half_precision and device == "cuda"
+
+            upscaler_params = dict(
+                model=cl_name_upscaler,
+                tile=tile,
+                tile_overlap=tile_overlap,
+                device=device,
+                half=use_half_precision,
+            )
+            stats = zero_comp(
+                video_file,
+                output_path,
+                as_gif,
+                upscaler_factor,
+                speed_factor,
+                progress,
+                upscaler_params,
+                keep_audio,
+                keep_metadata,
+                codec,
+                int(crf),
+                float(temporal_smoothing or 0.0),
+            )
         print(
             f"Saved {output_path} ({stats['frames']} frames, "
             f"{stats['width']}x{stats['height']}, {stats['fps']:.2f} FPS)"
@@ -483,12 +587,25 @@ with gr.Blocks(css=CUSTOM_CSS, title="Video Upscaler") as demo:
     with gr.Row():
         # inp_video = gr.Video(label="Input Video", format="mp4")
         inp_video = gr.File(label="Input Video", file_types=[".mp4", ".avi", ".mov", ".mkv", ".webm"])
+        processing_mode_choice = gr.Dropdown(
+            choices=PROCESSING_MODES,
+            label="Processing Mode",
+            value="Frame Upscaler",
+            info="Frame Upscaler is lighter. Video SR uses temporal models through optional MMagic dependencies.",
+        )
         upscaler_choice = gr.Dropdown(
             choices=UPSCALER_KEYS,
-            label="Upscaler",
+            label="Frame Upscaler Model",
             value=(UPSCALER_KEYS[0] if UPSCALER_KEYS else None),
             info="Select the upscaler model to use.",
         )
+        video_sr_choice = gr.Dropdown(
+            choices=VIDEO_SR_KEYS,
+            label="Video SR Model",
+            value=("RealBasicVSR" if "RealBasicVSR" in VIDEO_SR_KEYS else VIDEO_SR_KEYS[0]),
+            info="Temporal video super-resolution model. Requires optional MMagic/OpenMMLab setup.",
+        )
+    with gr.Row():
         model_guidance = gr.Textbox(
             label="Model guidance",
             value=model_guidance_text(UPSCALER_KEYS[0] if UPSCALER_KEYS else ""),
@@ -566,6 +683,22 @@ with gr.Blocks(css=CUSTOM_CSS, title="Video Upscaler") as demo:
             )
 
         with gr.Row():
+            video_sr_max_seq_len_number = gr.Number(
+                label="Video SR Max Sequence Length",
+                value=0,
+                precision=0,
+                minimum=0,
+                info="0 lets the model process the full sequence. Lower values reduce VRAM for recurrent models.",
+            )
+            video_sr_window_size_number = gr.Number(
+                label="Video SR Window Size",
+                value=0,
+                precision=0,
+                minimum=0,
+                info="0 disables sliding-window inference. Some non-recurrent models can use a positive odd window.",
+            )
+
+        with gr.Row():
             max_frames_number = gr.Number(
                 label="Max Frames",
                 value=(ZERO_GPU_MAX_FRAMES if IS_ZERO_GPU else DEFAULT_MAX_FRAMES),
@@ -598,12 +731,19 @@ with gr.Blocks(css=CUSTOM_CSS, title="Video Upscaler") as demo:
         inputs=upscaler_choice,
         outputs=model_guidance,
     )
+    video_sr_choice.change(
+        fn=video_sr_guidance_text,
+        inputs=video_sr_choice,
+        outputs=model_guidance,
+    )
 
     upscale_button.click(
         fn=start_upscaler,
         inputs=[
             inp_video,
+            processing_mode_choice,
             upscaler_choice,
+            video_sr_choice,
             gif_checkbox,
             speed_slider,
             half_check,
@@ -618,6 +758,8 @@ with gr.Blocks(css=CUSTOM_CSS, title="Video Upscaler") as demo:
             codec_choice,
             crf_slider,
             temporal_smoothing_slider,
+            video_sr_max_seq_len_number,
+            video_sr_window_size_number,
         ],
         outputs=output_text
     )

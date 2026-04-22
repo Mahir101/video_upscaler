@@ -23,6 +23,7 @@ A Gradio app for upscaling short videos with StablePy upscaler models.
 - Lets users set output codec, MP4 quality, audio/metadata preservation, and safety limits for frame count and source dimensions.
 - Shows model guidance in the UI so users can choose realistic, anime, sharp, or smoother upscalers more intentionally.
 - Includes optional temporal smoothing to reduce frame-to-frame shimmer from image upscalers.
+- Adds an optional temporal Video SR mode through OpenMMLab MMagic for BasicVSR, BasicVSR++, and RealBasicVSR.
 
 ## Setup
 
@@ -37,6 +38,19 @@ Install `ffmpeg` if you want MP4 audio preservation and H.264 output:
 ```bash
 brew install ffmpeg
 ```
+
+## Optional Video SR Backend
+
+The default mode uses StablePy image upscalers frame by frame. For true temporal video super-resolution, install the optional OpenMMLab stack and choose `Video SR` in the UI.
+
+```bash
+pip install -U openmim
+mim install mmengine
+mim install "mmcv>=2.0.0"
+pip install -r requirements-vsr.txt
+```
+
+Video SR models are much heavier than frame upscalers. Start with short clips and use `Video SR Max Sequence Length` if you run out of VRAM.
 
 ## Run
 
@@ -56,4 +70,5 @@ python3 -m unittest discover -s tests
 - GIF output does not preserve audio.
 - Hugging Face ZeroGPU runs are limited to short videos by the app.
 - To enforce upstream checksum validation for downloaded model files, add known SHA-256 hashes to `UPSCALER_SHA256` in `app.py`.
-- The current pipeline still applies image upscalers to individual frames. Temporal smoothing can reduce shimmer, but for the biggest quality jump, replace the inference path with a temporal video super-resolution model such as RealBasicVSR or BasicVSR++.
+- `Frame Upscaler` mode applies image upscalers to individual frames. Temporal smoothing can reduce shimmer.
+- `Video SR` mode uses temporal models through MMagic, so it can use neighboring frames for more consistent detail.

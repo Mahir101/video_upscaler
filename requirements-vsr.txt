@@ -1,0 +1,12 @@
+# Optional temporal video super-resolution backend.
+# Install these only when you want the "Video SR" processing mode.
+#
+# OpenMMLab packages are sensitive to Python, PyTorch, CUDA, and platform
+# versions. The most reliable install path is:
+#
+#   pip install -U openmim
+#   mim install mmengine
+#   mim install "mmcv>=2.0.0"
+#   pip install -r requirements-vsr.txt
+#
+mmagic>=1.2.0

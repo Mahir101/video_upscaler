@@ -3,6 +3,7 @@ import tempfile
 import unittest
 
 from video_utils import (
+    build_frame_encode_command,
     build_mux_command,
     cached_checksum,
     make_output_path,
@@ -79,6 +80,21 @@ class VideoUtilsTests(unittest.TestCase):
         self.assertIn("1:a?", command)
         self.assertIn("-c:a", command)
         self.assertIn("-map_metadata", command)
+
+    def test_build_frame_encode_command_uses_source_fps_and_pattern(self):
+        command = build_frame_encode_command(
+            "ffmpeg",
+            "frames/%08d.png",
+            29.97003,
+            "encoded.mp4",
+            codec="libx264",
+            crf=19,
+        )
+
+        self.assertIn("-framerate", command)
+        self.assertIn("29.970030", command)
+        self.assertIn("frames/%08d.png", command)
+        self.assertIn("encoded.mp4", command)
 
 
 if __name__ == "__main__":

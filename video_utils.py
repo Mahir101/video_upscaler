@@ -109,3 +109,30 @@ def build_mux_command(
 
     command.extend(["-shortest", output_path])
     return command
+
+
+def build_frame_encode_command(
+    ffmpeg,
+    frames_pattern,
+    fps,
+    output_path,
+    codec="libx264",
+    crf=18,
+):
+    return [
+        ffmpeg,
+        "-y",
+        "-framerate",
+        f"{float(fps):.6f}",
+        "-i",
+        frames_pattern,
+        "-c:v",
+        codec,
+        "-preset",
+        "medium",
+        "-crf",
+        str(int(crf)),
+        "-pix_fmt",
+        "yuv420p",
+        output_path,
+    ]
