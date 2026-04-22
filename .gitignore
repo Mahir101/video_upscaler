@@ -8,6 +8,7 @@ frames_hr/
 frames_4x/
 frames_8x/
 frames_interpolated/
+realesrgan-ncnn-extracted/
 
 # Binaries and executables
 *.exe
@@ -52,3 +53,8 @@ Thumbs.db
 *.param
 *.pkl
 *.safetensors
+
+# Photo enhancement outputs (comparison and enhanced images are generated)
+*_enhanced.png
+*_comparison.jpg
+enhanced/

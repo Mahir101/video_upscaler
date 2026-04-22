@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <cstdlib>
 #include <cstdio>
 #include <memory>
@@ -13,6 +14,7 @@
 #include <chrono>
 #include <atomic>
 #include <iomanip>
+#include <set>
 
 #if __has_include(<filesystem>)
   #include <filesystem>
@@ -29,6 +31,18 @@ std::atomic<bool> g_keep_running(true);
 std::string g_temp_dir = "";
 
 enum class Encoder { H264, HEVC, PRORES };
+
+// Image extensions recognised as still-image inputs
+static const std::set<std::string> IMAGE_EXTS = { "jpg","jpeg","png","bmp","webp","tif","tiff" };
+
+std::string file_extension_lower(const std::string& path) {
+    auto dot = path.rfind('.');
+    if (dot == std::string::npos) return "";
+    std::string ext = path.substr(dot + 1);
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
+    return ext;
+}
 
 void signal_handler(int signal) {
     if (signal == SIGINT) {
@@ -102,37 +116,88 @@ int main(int argc, char* argv[]) {
 
     // Default Configuration
     std::string input = "";
-    std::string output = "output_pro.mp4";
+    std::string output = "";
     std::string fps = "60";
     std::string scale = "4";
     std::string limit_frames = "";
+    std::string ncnn_model = "realesrgan-x4plus";   // model name for NCNN binary
     Encoder encoder = Encoder::H264;
     bool use_rife = false;
 
     // Advanced Flag Parsing
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--input" || arg == "-i") input = argv[++i];
-        else if (arg == "--output" || arg == "-o") output = argv[++i];
-        else if (arg == "--fps" || arg == "-f") fps = argv[++i];
-        else if (arg == "--scale" || arg == "-s") scale = argv[++i];
-        else if (arg == "--frames" || arg == "-n") limit_frames = argv[++i];
-        else if (arg == "--hevc") encoder = Encoder::HEVC;
-        else if (arg == "--prores") { encoder = Encoder::PRORES; output = "output_pro.mov"; }
-        else if (arg == "--rife") use_rife = true;
+        if ((arg == "--input"  || arg == "-i") && i+1 < argc) input  = argv[++i];
+        else if ((arg == "--output" || arg == "-o") && i+1 < argc) output = argv[++i];
+        else if ((arg == "--fps"    || arg == "-f") && i+1 < argc) fps    = argv[++i];
+        else if ((arg == "--scale"  || arg == "-s") && i+1 < argc) scale  = argv[++i];
+        else if ((arg == "--frames" || arg == "-n") && i+1 < argc) limit_frames = argv[++i];
+        else if ((arg == "--model"  || arg == "-m") && i+1 < argc) ncnn_model   = argv[++i];
+        else if (arg == "--hevc")   encoder = Encoder::HEVC;
+        else if (arg == "--prores") { encoder = Encoder::PRORES; }
+        else if (arg == "--rife")   use_rife = true;
     }
 
     if (input.empty()) {
-        std::cout << "Usage: ./upscaler --input <file> [options]" << std::endl;
-        std::cout << "Advanced Options:" << std::endl;
-        std::cout << "  --hevc           Use H.265 (Ultra Efficiency)" << std::endl;
-        std::cout << "  --prores         Use Apple ProRes (Professional HQ)" << std::endl;
-        std::cout << "  --rife           Use RIFE AI interpolation" << std::endl;
-        std::cout << "  --fps <val>      Target FPS (default: 60)" << std::endl;
+        std::cout << "Usage: ./upscaler_ult --input <file> [options]\n\n";
+        std::cout << "Image / Video Options:\n";
+        std::cout << "  --model / -m <name>  NCNN model name (default: realesrgan-x4plus)\n";
+        std::cout << "                       Models: realesrgan-x4plus  realesrgan-x4plus-anime\n";
+        std::cout << "                               realesrnet-x4plus\n";
+        std::cout << "  --scale / -s <n>     Upscale factor (default: 4)\n";
+        std::cout << "\nVideo-only Options:\n";
+        std::cout << "  --hevc               H.265 hardware encoder (VideoToolbox)\n";
+        std::cout << "  --prores             Apple ProRes 422 HQ encoder\n";
+        std::cout << "  --rife               RIFE AI frame interpolation\n";
+        std::cout << "  --fps / -f <val>     Target FPS (default: 60)\n";
+        std::cout << "  --frames / -n <n>    Limit extracted frames (testing)\n";
+        std::cout << "\nOutput:\n";
+        std::cout << "  --output / -o <path> Custom output path\n";
         return 1;
     }
 
+    // --- Detect whether input is a still image or a video ---
+    std::string ext = file_extension_lower(input);
+    bool is_image = IMAGE_EXTS.count(ext) > 0;
+
     try {
+        // ----------------------------------------------------------------
+        // IMAGE MODE — single still image upscaling via NCNN binary
+        // ----------------------------------------------------------------
+        if (is_image) {
+            if (output.empty()) {
+                auto dot = input.rfind('.');
+                std::string stem = (dot != std::string::npos) ? input.substr(0, dot) : input;
+                output = stem + "_enhanced.png";
+            }
+
+            std::string safe_model = shell_token(ncnn_model);
+            std::string safe_scale = shell_token(scale);
+
+            std::cout << "🖼️  Image mode detected" << std::endl;
+            std::cout << "   Model : " << ncnn_model << std::endl;
+            std::cout << "   Scale : " << scale << "x" << std::endl;
+
+            std::string upscale_cmd =
+                "./realesrgan-ncnn-vulkan -i " + shell_quote(input) +
+                " -o " + shell_quote(output) +
+                " -n " + safe_model +
+                " -s " + safe_scale;
+
+            std::cout << "🔍 Applying AI Super-Resolution..." << std::endl;
+            run_command(upscale_cmd, false);
+
+            std::cout << "\n\033[1;32m✅ SUCCESS! Enhanced image: " << output << "\033[0m" << std::endl;
+            return 0;
+        }
+
+        // ----------------------------------------------------------------
+        // VIDEO MODE — full frame-extract → upscale → interpolate → encode
+        // ----------------------------------------------------------------
+        if (output.empty()) {
+            output = (encoder == Encoder::PRORES) ? "output_pro.mov" : "output_pro.mp4";
+        }
+
         g_temp_dir = "temp_ultimate_" + std::to_string(std::time(nullptr));
         fs::create_directories(g_temp_dir + "/lr");
         fs::create_directories(g_temp_dir + "/hr");
@@ -155,7 +220,8 @@ int main(int argc, char* argv[]) {
         std::cout << "🔍 Applying AI Super-Resolution (Real-ESRGAN)..." << std::endl;
         std::string safe_scale = shell_token(scale);
         std::string safe_fps = shell_token(fps);
-        std::string upscale_cmd = "./realesrgan-ncnn-vulkan -i " + shell_quote(g_temp_dir + "/lr") + " -o " + shell_quote(g_temp_dir + "/hr") + " -n realesrgan-x4plus -s " + safe_scale + " -t 1024 -f png";
+        std::string safe_model = shell_token(ncnn_model);
+        std::string upscale_cmd = "./realesrgan-ncnn-vulkan -i " + shell_quote(g_temp_dir + "/lr") + " -o " + shell_quote(g_temp_dir + "/hr") + " -n " + safe_model + " -s " + safe_scale + " -t 1024 -f png";
         
         std::atomic<bool> upscale_done(false);
         std::thread monitor([&]() {
