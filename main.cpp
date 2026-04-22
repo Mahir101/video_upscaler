@@ -8,6 +8,7 @@
 #include <array>
 #include <ctime>
 #include <csignal>
+#include <cctype>
 #include <thread>
 #include <chrono>
 #include <atomic>
@@ -55,6 +56,26 @@ std::string get_command_output(const std::string& cmd) {
     if (!pipe) throw std::runtime_error("popen() failed!");
     while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) result += buffer.data();
     return result;
+}
+
+std::string shell_quote(const std::string& value) {
+    std::string quoted = "'";
+    for (char c : value) {
+        if (c == '\'') quoted += "'\\''";
+        else quoted += c;
+    }
+    quoted += "'";
+    return quoted;
+}
+
+std::string shell_token(const std::string& value) {
+    if (value.empty()) throw std::runtime_error("Missing command value");
+    for (char c : value) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '.' && c != '_' && c != '-') {
+            throw std::runtime_error("Unsafe command token: " + value);
+        }
+    }
+    return value;
 }
 
 void print_progress_bar(float progress, int width = 40) {
@@ -118,21 +139,23 @@ int main(int argc, char* argv[]) {
         fs::create_directories(g_temp_dir + "/interp");
 
         std::cout << "� Analyzing Video Stream..." << std::endl;
-        std::string fps_cmd = "ffprobe -v 0 -of csv=p=0 -select_streams v:0 -show_entries stream=r_frame_rate \"" + input + "\" | head -1";
+        std::string fps_cmd = "ffprobe -v 0 -of csv=p=0 -select_streams v:0 -show_entries stream=r_frame_rate " + shell_quote(input) + " | head -1";
         std::string orig_fps = get_command_output(fps_cmd);
         if (!orig_fps.empty() && orig_fps.back() == '\n') orig_fps.pop_back();
 
         // Step 1: Sequential Pipe Extraction
         std::cout << "📽️  Extracting Frames..." << std::endl;
         std::string frames_limit = limit_frames.empty() ? "" : "-frames:v " + limit_frames;
-        run_command("ffmpeg -y -i \"" + input + "\" " + frames_limit + " -qscale:v 2 \"" + g_temp_dir + "/lr/f_%07d.png\"");
+        run_command("ffmpeg -y -i " + shell_quote(input) + " " + frames_limit + " -qscale:v 2 " + shell_quote(g_temp_dir + "/lr/f_%07d.png"));
         
         size_t total_frames = std::distance(fs::directory_iterator(g_temp_dir + "/lr"), fs::directory_iterator{});
         std::cout << "📦 Frames: " << total_frames << " | Source: " << orig_fps << " FPS" << std::endl;
 
         // Step 2: Parallel AI Upscaling
         std::cout << "🔍 Applying AI Super-Resolution (Real-ESRGAN)..." << std::endl;
-        std::string upscale_cmd = "./realesrgan-ncnn-vulkan -i \"" + g_temp_dir + "/lr\" -o \"" + g_temp_dir + "/hr\" -n realesrgan-x4plus -s " + scale + " -t 1024 -f png";
+        std::string safe_scale = shell_token(scale);
+        std::string safe_fps = shell_token(fps);
+        std::string upscale_cmd = "./realesrgan-ncnn-vulkan -i " + shell_quote(g_temp_dir + "/lr") + " -o " + shell_quote(g_temp_dir + "/hr") + " -n realesrgan-x4plus -s " + safe_scale + " -t 1024 -f png";
         
         std::atomic<bool> upscale_done(false);
         std::thread monitor([&]() {
@@ -153,7 +176,7 @@ int main(int argc, char* argv[]) {
         if (use_rife) {
             std::cout << "✨ Applying AI Fluid Motion (RIFE)..." << std::endl;
             if (fs::exists("./rife-ncnn-vulkan")) {
-                run_command("./rife-ncnn-vulkan -i \"" + g_temp_dir + "/hr\" -o \"" + g_temp_dir + "/interp\" -n rife-v4");
+                run_command("./rife-ncnn-vulkan -i " + shell_quote(g_temp_dir + "/hr") + " -o " + shell_quote(g_temp_dir + "/interp") + " -n rife-v4");
                 final_frame_dir = g_temp_dir + "/interp";
             } else {
                 std::cout << "⚠️ RIFE binary not found. Falling back to high-quality FFmpeg interpolation." << std::endl;
@@ -183,15 +206,16 @@ int main(int argc, char* argv[]) {
                 break;
         }
 
-        std::string filter = (final_frame_dir == g_temp_dir + "/interp") ? "" : "-vf \"minterpolate=fps=" + fps + ":mi_mode=mci:mc_mode=aobmc\"";
+        std::string filter = (final_frame_dir == g_temp_dir + "/interp") ? "" : "-vf " + shell_quote("minterpolate=fps=" + safe_fps + ":mi_mode=mci:mc_mode=aobmc");
         
-        std::string encode_cmd = "ffmpeg -y -framerate " + (use_rife ? fps : orig_fps) + " -i \"" + final_frame_dir + "/f_%07d.png\" " +
-                                filter + " -c:v " + codec_flag + " " + bitrate_flag + " -pix_fmt " + pix_fmt + " -an \"" + g_temp_dir + "/no_audio.mp4\"";
+        std::string safe_input_fps = shell_token(use_rife ? safe_fps : orig_fps);
+        std::string encode_cmd = "ffmpeg -y -framerate " + safe_input_fps + " -i " + shell_quote(final_frame_dir + "/f_%07d.png") + " " +
+                                filter + " -c:v " + codec_flag + " " + bitrate_flag + " -pix_fmt " + pix_fmt + " -an " + shell_quote(g_temp_dir + "/no_audio.mp4");
         run_command(encode_cmd);
 
         // Step 5: Audio Mix
         std::cout << "🔊 Mixing Master Audio..." << std::endl;
-        std::string audio_cmd = "ffmpeg -y -i \"" + g_temp_dir + "/no_audio.mp4\" -i \"" + input + "\" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0? -shortest \"" + output + "\"";
+        std::string audio_cmd = "ffmpeg -y -i " + shell_quote(g_temp_dir + "/no_audio.mp4") + " -i " + shell_quote(input) + " -c:v copy -c:a aac -map 0:v:0 -map 1:a:0? -shortest " + shell_quote(output);
         run_command(audio_cmd);
 
         fs::remove_all(g_temp_dir);
